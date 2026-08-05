@@ -1,3 +1,4 @@
+const multer = require('multer');
 const documentService = require('../services/documentService');
 
 function validationError(res, message) {
@@ -18,6 +19,43 @@ function internalError(res) {
   });
 }
 
+function logError(operation, error) {
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      operation,
+      code: error?.code || 'UNEXPECTED_ERROR',
+      message: error?.message || 'Unexpected error',
+    })
+  );
+}
+
+function handleUploadMiddlewareError(error, res) {
+  if (!error) {
+    return null;
+  }
+
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        error: {
+          code: 'UPLOAD_LIMIT_EXCEEDED',
+          message: 'Arquivo excede o limite de tamanho permitido',
+        },
+      });
+    }
+
+    return res.status(400).json({
+      error: {
+        code: 'UPLOAD_VALIDATION_ERROR',
+        message: 'Dados de upload invalidos',
+      },
+    });
+  }
+
+  return internalError(res);
+}
+
 async function uploadDocument(req, res) {
   try {
     const owner = typeof req.body?.owner === 'string' ? req.body.owner.trim() : '';
@@ -30,6 +68,10 @@ async function uploadDocument(req, res) {
       return validationError(res, 'O campo owner e obrigatorio');
     }
 
+    if (!Number.isFinite(req.file.size) || req.file.size <= 0) {
+      return validationError(res, 'O arquivo precisa conter dados');
+    }
+
     const metadata = await documentService.createDocument({
       file: req.file,
       owner,
@@ -37,6 +79,7 @@ async function uploadDocument(req, res) {
 
     return res.status(201).json(metadata);
   } catch (error) {
+    logError('uploadDocument', error);
     return internalError(res);
   }
 }
@@ -46,6 +89,7 @@ function listDocuments(req, res) {
     const documents = documentService.listDocuments();
     return res.status(200).json(documents);
   } catch (error) {
+    logError('listDocuments', error);
     return internalError(res);
   }
 }
@@ -56,6 +100,7 @@ async function downloadDocument(req, res) {
 
     return res.download(download.storagePath, download.originalName, (error) => {
       if (error && !res.headersSent) {
+        logError('downloadDocument.resDownload', error);
         return internalError(res);
       }
 
@@ -71,11 +116,13 @@ async function downloadDocument(req, res) {
       });
     }
 
+    logError('downloadDocument', error);
     return internalError(res);
   }
 }
 
 module.exports = {
+  handleUploadMiddlewareError,
   uploadDocument,
   listDocuments,
   downloadDocument,

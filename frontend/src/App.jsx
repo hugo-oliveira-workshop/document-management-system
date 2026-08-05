@@ -10,22 +10,33 @@ export default function App() {
   const [loadErrorMessage, setLoadErrorMessage] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
 
-  const loadDocuments = useCallback(async () => {
+  const loadDocuments = useCallback(async ({ signal } = {}) => {
     setIsLoadingDocuments(true);
     setLoadErrorMessage('');
 
     try {
-      const documentList = await listDocuments();
+      const documentList = await listDocuments({ signal });
       setDocuments(documentList);
     } catch (error) {
+      if (signal?.aborted) {
+        return;
+      }
+
       setLoadErrorMessage(error.message || 'Nao foi possivel listar os documentos.');
     } finally {
-      setIsLoadingDocuments(false);
+      if (!signal?.aborted) {
+        setIsLoadingDocuments(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    loadDocuments();
+    const abortController = new AbortController();
+    loadDocuments({ signal: abortController.signal });
+
+    return () => {
+      abortController.abort();
+    };
   }, [loadDocuments]);
 
   async function handleUpload({ file, owner }) {

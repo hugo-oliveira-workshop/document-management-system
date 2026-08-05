@@ -1,6 +1,20 @@
 const fs = require('node:fs/promises');
+const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const documentRepository = require('../repositories/documentRepository');
+const { storageDir } = require('../config/env');
+
+function ensurePathIsInsideStorage(filePath) {
+  const absoluteStorageDir = path.resolve(storageDir);
+  const absoluteFilePath = path.resolve(filePath);
+  const relativePath = path.relative(absoluteStorageDir, absoluteFilePath);
+
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    const error = new Error('File path is outside the storage directory');
+    error.code = 'INVALID_STORAGE_PATH';
+    throw error;
+  }
+}
 
 function toPublicMetadata(document) {
   return {
@@ -14,6 +28,8 @@ function toPublicMetadata(document) {
 }
 
 async function createDocument({ file, owner }) {
+  ensurePathIsInsideStorage(file.path);
+
   const metadata = {
     id: randomUUID(),
     originalName: file.originalname,
@@ -42,6 +58,8 @@ async function getDownloadById(id) {
     error.code = 'DOCUMENT_NOT_FOUND';
     throw error;
   }
+
+  ensurePathIsInsideStorage(metadata.storagePath);
 
   try {
     await fs.access(metadata.storagePath);

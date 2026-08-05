@@ -1,4 +1,5 @@
 const API_PREFIX = '/api';
+const DEFAULT_TIMEOUT_MS = 15000;
 
 function buildUrl(path) {
   return `${API_PREFIX}${path}`;
@@ -18,7 +19,30 @@ async function parseErrorResponse(response) {
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(buildUrl(path), options);
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...fetchOptions } = options;
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
+
+  if (signal) {
+    signal.addEventListener('abort', () => timeoutController.abort(), { once: true });
+  }
+
+  let response;
+
+  try {
+    response = await fetch(buildUrl(path), {
+      ...fetchOptions,
+      signal: timeoutController.signal,
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('A requisicao expirou. Tente novamente.');
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     await parseErrorResponse(response);
@@ -58,8 +82,8 @@ export async function uploadDocument({ file, owner }) {
   return response.json();
 }
 
-export async function listDocuments() {
-  const response = await request('/documents');
+export async function listDocuments({ signal } = {}) {
+  const response = await request('/documents', { signal });
   return response.json();
 }
 

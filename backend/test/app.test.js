@@ -54,7 +54,7 @@ test('GET /health responde com status ok', async () => {
   assert.deepStrictEqual(await response.json(), { status: 'ok' });
 });
 
-test('POST /upload, GET /documents e GET /documents/:id/download funcionam em fluxo completo', async () => {
+test('POST /upload retorna 201 e metadados do documento', async () => {
   const form = new FormData();
   form.append('owner', 'user-123');
   form.append('file', new Blob(['conteudo de teste'], { type: 'text/plain' }), 'teste.txt');
@@ -71,12 +71,42 @@ test('POST /upload, GET /documents e GET /documents/:id/download funcionam em fl
   assert.strictEqual(uploadedMetadata.originalName, 'teste.txt');
   assert.strictEqual(uploadedMetadata.owner, 'user-123');
 
+});
+
+test('GET /documents retorna lista de documentos enviados', async () => {
+  const form = new FormData();
+  form.append('owner', 'user-123');
+  form.append('file', new Blob(['conteudo de teste'], { type: 'text/plain' }), 'teste.txt');
+
+  const uploadResponse = await fetch(`${baseUrl}/upload`, {
+    method: 'POST',
+    body: form,
+  });
+
+  assert.strictEqual(uploadResponse.status, 201);
+  const uploadedMetadata = await uploadResponse.json();
+
   const listResponse = await fetch(`${baseUrl}/documents`);
   assert.strictEqual(listResponse.status, 200);
 
   const listedDocuments = await listResponse.json();
   assert.strictEqual(listedDocuments.length, 1);
   assert.strictEqual(listedDocuments[0].id, uploadedMetadata.id);
+  assert.strictEqual(listedDocuments[0].originalName, 'teste.txt');
+});
+
+test('GET /documents/:id/download retorna arquivo enviado', async () => {
+  const form = new FormData();
+  form.append('owner', 'user-123');
+  form.append('file', new Blob(['conteudo de teste'], { type: 'text/plain' }), 'teste.txt');
+
+  const uploadResponse = await fetch(`${baseUrl}/upload`, {
+    method: 'POST',
+    body: form,
+  });
+
+  assert.strictEqual(uploadResponse.status, 201);
+  const uploadedMetadata = await uploadResponse.json();
 
   const downloadResponse = await fetch(
     `${baseUrl}/documents/${uploadedMetadata.id}/download`
